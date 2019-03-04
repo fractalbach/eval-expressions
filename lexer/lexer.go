@@ -3,6 +3,7 @@ package lexer
 import (
 	"fmt"
 	"unicode"
+	"github.com/fractalbach/eval-expressions/token"
 )
 
 // ======================================================================
@@ -13,14 +14,14 @@ import (
 // an input string, save the generated tokens, and/or leave an error if there
 // is a syntax error.
 type Lexer struct {
-	tokens []token
+	tokens []token.Token
 	err    error
 }
 
 // New creates a new Lexer structure.
 func New() *Lexer {
 	return &Lexer{
-		tokens: []token{},
+		tokens: []token.Token{},
 		err:    nil,
 	}
 }
@@ -46,33 +47,19 @@ func (l *Lexer) Display() {
 	}
 }
 
+// Tokens returns a list of tokens that can be sent to the parser.
+func (l *Lexer) Tokens() []token.Token {
+	return l.tokens
+}
+
 func (l *Lexer) clear() {
-	l.tokens = []token{}
+	l.tokens = []token.Token{}
 	l.err = nil
-}
-
-// ======================================================================
-// Token Structure
-// ======================================================================
-
-type token struct {
-	kind    string
-	content string
-}
-
-func (t token) String() string {
-	return fmt.Sprintf("<%s> %s </%s>", t.kind, t.content, t.kind)
 }
 
 // ======================================================================
 // Tokenization Process
 // ======================================================================
-
-const (
-	noKind = ""
-	number = "number"
-	word = "word"
-)
 
 var (
 	content        = ""
@@ -85,17 +72,18 @@ func (l *Lexer) tokenize(s string) {
 	reset()
 	for _, r := range s {
 		switch r {
+
 		case '(', ')', '+', '-', '*', '/', '=':
 			l.pushLastToken()
-			l.push("symbol", string(r))
+			l.push(token.SymbolToken, string(r))
 			continue
 
 		case '.':
-			if kind == noKind {
+			if kind == token.NoKind {
 				l.setErr("cannot use \".\" to start a number")
 				return
 			}
-			if kind != number {
+			if kind != token.NumberToken {
 				l.setErr("cannot use \".\" outside number")
 				return
 			}
@@ -108,21 +96,22 @@ func (l *Lexer) tokenize(s string) {
 			continue
 		}
 		switch {
+
 		case unicode.IsSpace(r):
 			continue
 
 		case unicode.IsDigit(r):
 			if !insideToken {
-				startToken("number")
+				startToken(token.NumberToken)
 			}
 			content += string(r)
 			continue
 
 		case unicode.IsLetter(r):
 			if !insideToken {
-				startToken("word")
+				startToken(token.IDToken)
 			}
-			if kind == number {
+			if kind == token.NumberToken {
 				l.setErr("cannot start identifier with a number.")
 				return
 			}
@@ -151,11 +140,9 @@ func (l *Lexer) pushLastToken() {
 }
 
 func (l *Lexer) push(kind, content string) {
-	l.tokens = append(l.tokens, token{
-		kind:    kind,
-		content: content,
-	})
+	l.tokens = append(l.tokens, token.New(kind, content))
 }
+
 
 func startToken(name string) {
 	insideToken = true

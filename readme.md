@@ -7,11 +7,18 @@ later expressions.
 
 ## Approach
 
-1. Identify the grammar.
-2. Create a parse tree.
-3. Add operator precendence.
-4. Add Symbol tables and variables.
+1. Input String with expression
+2. Convert String to Tokens
+3. Put Tokens in the form of an Abstract Syntax Tree
+4. Make use of the Tree to evaluate the expression
+5. Output String with answer
 
+## Stuff to Make
+
+1. Design the Language
+2. Build Tokenizer
+3. Build Parser
+4. Build Evaluator
 
 # Context Free Grammar
 

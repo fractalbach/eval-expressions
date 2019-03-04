@@ -8,24 +8,26 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/fractalbach/eval-expressions/lexer"
+	// "github.com/Knetic/govaluate"
+	"github.com/fractalbach/eval-expressions/parser"
 )
 
 var (
-	lex             = lexer.New()
-	interactiveFlag = false
+	lex        = lexer.New()
+	simpleFlag = false
 )
 
-func init () {
-	flag.BoolVar(&interactiveFlag, "i", false, "use interactive mode.")
+func init() {
+	flag.BoolVar(&simpleFlag, "s", false, "simple mode. not interactive.")
 }
 
 func main() {
 	flag.Parse()
-	if interactiveFlag {
-		interactiveMode()
+	if simpleFlag {
+		plainMode()
 		return
 	}
-	plainMode()
+	interactiveMode()
 }
 
 func interactiveMode() {
@@ -69,16 +71,42 @@ func showErr(err interface{}) {
 	color.Unset()
 }
 
+const lolz = `
+ __________________________________________________
+/                                                  \
+|                    R   I   P                     |
+|                                                  |
+|           Here lies the Tree of Parsing          |
+|                                                  |
+|             It's final words were....            |
+|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|`
+
 func eval(s string) {
-	lex.Tokenize(s)
-	err := lex.Error()
-	if err != nil {
-		showErr(err)
-	} else {
-		color.Set(color.FgGreen)
-		lex.Display()
-		color.Unset()
+	if s == "" {
+		return
 	}
+	lex.Tokenize(s)
+	if lex.Error() != nil {
+		showErr(lex.Error())
+		return
+	}
+
+	// expr, _ := govaluate.NewEvaluableExpression(s)
+	// result, _ := expr.Evaluate(nil)
+
+	list := lex.Tokens()
+	ast, err := parser.Parse(list)
+	if err != nil {
+		showErr(lolz)
+		showErr(err)
+		return
+	}
+
+	color.Set(color.FgGreen)
+	// fmt.Println(result)
+	fmt.Println("_________ The Tree of Parsing __________")
+	ast.Display()
+	color.Unset()
 }
 
 func plainEval(s string) {
