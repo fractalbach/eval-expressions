@@ -6,247 +6,178 @@ import (
 	"github.com/fractalbach/eval-expressions/token"
 )
 
-// Parse takes a list of tokens and converts them into an Abstract
-// Syntax Tree.
-func Parse(list []token.Token) (AST, error) {
-	if len(list) == 0 {
-		return AST{}, nil
-	}
-	p := &parser{
-		root:   newNode("start"),
-		done:   make(chan bool),
-		tokens: list,
-		index:  0,
-	}
-	p.node = p.root
-	go p.parseStart()
-	<-p.done
-	fmt.Println("done")
-	ast := AST{root: p.root}
-	var err error
-	if p.err != "" {
-		err = fmt.Errorf("%s", p.err)
-	}
-	return ast, err
-}
-
 // ======================================================================
-// The Parser and the Syntax Tree
+// Notes about the Grammar
 // ======================================================================
 
-type parser struct {
-	node   *node
-	root   *node
-	tokens []token.Token
-	index  int
-	err    string
-	done   chan bool
-}
+/*
 
-// ------------------------------------------------------------
-//  Iterating through Tokens
-// ------------------------------------------------------------
+dragon book info:
+(pdf page, not actual page)
 
-func (p *parser) token() token.Token {
-	return p.tokens[p.index]
-}
+(72) : expresions, terms, factors
+(74) : problems
+(81) : traversals & semantic actions {}
+(83) : problems 
 
-func (p *parser) hasMoreTokens() bool {
-	return p.index+1 < len(p.tokens)
-}
 
-func (p *parser) advance() {
-	if !p.hasMoreTokens() {
-		p.done <- true
-		return
-	}
-	p.index++
-	fmt.Println("advanced to:", p.index)
-}
+# Postfix Translation using Semantic Actions
 
-func (p *parser) peek() (token.Token, bool) {
-	if p.hasMoreTokens() {
-		return p.tokens[p.index+1], true
-	}
-	return token.Token{}, false
-}
+Left-associative
+Post-order Traversal
 
-func (p *parser) consume() {
-	n := &node{
-		token: p.token(),
-		terminal: true,
-	}
-	p.node.pushChild(n)
-	// fmt.Println("consumed:", p.token())
-	p.advance()
-}
+stmnt ->  
+| id = expr     {assign}
+| expr          {display}
 
-// ------------------------------------------------------------
-// Specific Parsing Functions
-// ------------------------------------------------------------
+expr ->  
+| expr + term   {add}
+| expr - term   {sub}
+| term         
 
-func (p *parser) parseStart() {
-	p.parseExpression()
-	p.done <- true
-}
+term ->  
+| term * factor {mul}
+| term / factor {div}
+| factor 
 
-func (p *parser) parseExpression() {
-	p.pushAndFollow("expr")
-	defer p.climbUp()
-	//
-	// Start by checking for a nested expression.
-	//
-	if p.token().Content == "(" {
-		p.advance()
-		if p.token().Content != ")" {
-			p.parseExpression()
-		}
-		if p.token().Content != ")" {
-			p.throw("open paren must have matching close paren.")
-		}
-		p.advance()
-		return
-	}
-	//
-	// Check for a terminal node like a plain number or identifier.
-	// 
-	kind := p.token().Kind
-	if kind == token.NumberToken || kind == token.IDToken {
-		p.consume()
-	} else {
-		p.parseExpression()
-	}
-	//
-	// Check if we have an operator now.  If we don't, then assume the
-	// expression has been completed.
-	//
-	for p.hasOperator() {
-		p.parseOperator()
-		p.parseSecondaryExpression()
-	}
-}
+factor -> 
+| number        {push number}
+| ( expr )
 
-func (p *parser) parseOperator() {
-	if p.hasOperator() {
-		p.consume()
-		return
-	}
-	//
-	// Reject those other foolish symbols and whatever other
-	// craziness may have emerged from the depths of the parser!
-	//
-	p.throw(
-		"expected operator, but you gave me this crap instead!:",
-		p.token().Content,
-	)
-}
 
-func (p *parser) parseSecondaryExpression() {
-	p.pushAndFollow("expr2")
-	defer p.climbUp()
-	//
-	// If you aren't in a nest, you must be terminally falling
-	// toward the end.
-	//
-	if p.token().Content != "(" {
-		p.parseTerm()
-		return
-	}
-	//
-	// aww yeah looks like we got some parens! (((Nest it up)))!
-	//
-	p.consume()
-	p.parseExpression()
-	if p.token().Content != ")" {
-		p.throw("=( open paren must have matching close paren...")
-		return
-	}
-	p.consume() // )
-}
+# Parsing
 
-func (p *parser) parseTerm() {
-	kind := p.token().Kind
-	if !(kind == token.NumberToken || kind == token.IDToken) {
-		p.throw(
-			"I wanted a Number or Identifer",
-			"But instead you gave me lies!\n",
-			"wtf is this?!: ",
-			p.token().Content,
-		)
-	}
-	p.consume()
-}
+Top-down  : easier to write by hand
+Bottom-up : better for parser generator (more powerful)
 
-func (p *parser) throw(v ...interface{}) {
-	p.err = fmt.Sprint(v...)
-	p.done <- true
-}
+## Recursive-Decent
 
-func (p *parser) hasOperator() bool {
-	switch p.token().Content {
-	case "-", "+", "/", "*":
-		return true
-	}
-	return false
-}
+- Recursive-Decent is a type of top-down parsing.
+- Each nonterminal in the grammar has a procedure associated with it.
+
+### Predictive Parsing
+
+- Predictive Parsing is a form of Recursive-Decent.
+- Lookahead Symbol determines flow of control.
+
+
+*/
 
 // ======================================================================
-// Abstract Syntax Tree Nodes
+// Kinds of Nodes
 // ======================================================================
 
-type node struct {
-	name     string
-	token    token.Token
-	terminal bool
-	parent   *node
-	children []*node
-}
+// NodeKind represents a specific kind of node that can be found in an
+// Abstract Syntax Tree. Each one has a different semantic
+// meaning. Terminal is a special kind of node: it hints that you
+// should use the token contained within that node.
+type NodeKind int
 
-func (n *node) pushChild(child *node) {
-	n.children = append(n.children, child)
-	child.parent = n
-}
+//go:generate stringer -type=NodeKind
 
-func (p *parser) pushAndFollow(name string) {
-	child := newNode(name)
-	p.node.pushChild(child)
-	p.node = child
-}
-
-func (p *parser) climbUp() {
-	p.node = p.node.parent
-}
-
-func newNode(name string) *node {
-	return &node{name: name}
-}
-
-func (n *node) display(depth int) {
-	spaces := ""
-	for i := 0; i < depth; i++ {
-		spaces += "  "
-	}
-	if n.terminal {
-		fmt.Printf("%v%v\n", spaces, n.token)
-		return
-	}
-	fmt.Printf("%v<%v>\n", spaces, n.name)
-	for _, next := range n.children {
-		next.display(depth + 1)
-	}
-	fmt.Printf("%v</%v>\n", spaces, n.name)
-}
+const (
+	_ NodeKind = 1 << iota
+	TERMINAL
+	START
+	EXPR
+	TERM
+	FACTOR
+)
 
 // ======================================================================
-// Publicly Accesible Abstract Syntax Tree
+// Abstract Syntax Tree
 // ======================================================================
 
-// AST is an abstract syntax that has been produced by the parser. You
-// can use this to display the tree.
+// AST is the public Abstract Syntax tree that you get when you parse
+// an expression. Used to display the tree and create the answer.
 type AST struct {
-	root *node
+	Root *Node
 }
 
-func (ast AST) Display() {
-	ast.root.display(0)
+type Node struct {
+	Parent   *Node
+	Children []*Node
+	Kind     NodeKind
+	Tok      token.Token
 }
+
+func NewNode(kind NodeKind) *Node {
+	return &Node{
+		Kind: kind,
+	}
+}
+
+func NewLeafNode(tok token.Token) *Node {
+	return &Node{
+		Kind: TERMINAL,
+		Tok:  tok,
+	}
+}
+
+func (n *Node) appendChild(child *Node) {
+	n.Children = append(n.Children, child)
+}
+
+func Parse(s string) struct {
+}
+
+// ======================================================================
+// Productions
+// ======================================================================
+
+/*
+stmnt ->  
+| id = expr     {assign}
+| expr          {display}
+
+expr ->  
+| expr + term   {add}
+| expr - term   {sub}
+| term         
+
+term ->  
+| term * factor {mul}
+| term / factor {div}
+| factor 
+
+factor -> 
+| number        {push number}
+| ( expr )
+
+*/
+
+
+
+
+// ======================================================================
+// Semantics
+// ======================================================================
+
+func (ast *AST) semantics() {
+	ast.Root.recurseSemantics()
+}
+
+// postorder traverse, also called depth-first traverse 
+func (n *Node) recurseSemantics() {
+	n.semantics()
+	if len(n.Children) == 0 {
+		return
+	}
+	for _, child := range n.Children {
+		child.recurseSemantics()
+	}
+}
+
+func (n *Node) semantics() {
+	switch n.Kind {
+	case TERMINAL:
+		fmt.Print(n.Tok)
+	case START:
+		fmt.Println("program starts")
+	case EXPR:
+		fmt.Println("")
+	case TERM:
+	case FACTOR:
+	}
+}
+

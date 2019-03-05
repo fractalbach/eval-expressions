@@ -34,7 +34,7 @@ func interactiveMode() {
 
 func welcome() {
 	color.Set(color.FgHiMagenta)
-	fmt.Println("══════════( Expression Evaluator )══════════")
+	fmt.Println(title("Expression Evaluator!", 70))
 	color.Unset()
 }
 
@@ -66,22 +66,46 @@ func eval(s string) {
 	}
 
 	lex.Tokenize(s)
-	
+
 	err := lex.Error()
+
+	color.Set(color.FgHiMagenta)
+	// fmt.Println("══════════ Tokens ══════════ ")
+	lex.Display()
+	color.Unset()
 
 	if err != nil {
 		showErr(err)
 		return
 	}
 
-	// color.Set(color.FgHiMagenta)
-	// fmt.Println("_________[  Info  ]__________")
-	// fmt.Println(info)
-	// color.Unset()
+	fmt.Println()
 
-	color.Set(color.FgGreen)
-	fmt.Println("_________[ Answer ]__________")
-	// fmt.Println(answer)
-	lex.Display()
-	color.Unset()
+	// color.Set(color.FgGreen)
+	// fmt.Println("══════════ Answer ══════════ ")
+	// color.Unset()
+}
+
+func title(title string, boxSize int) string {
+	top := "┌"
+	middle := "│"
+	bottom := "╘"
+	for i := 0; i < boxSize; i++ {
+		top += "─"
+		bottom += "═"
+	}
+	i := 0
+	nSpaces := boxSize/2 - len(title)/2
+	for ; i < nSpaces; i++ {
+		middle += " "
+	}
+	i += len(title)
+	middle += title
+	for ; i < boxSize; i++ {
+		middle += " "
+	}
+	top += "┐\n"
+	middle += "│\n"
+	bottom += "╛"
+	return top + middle + bottom
 }
