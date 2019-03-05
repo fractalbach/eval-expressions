@@ -2,8 +2,8 @@ package lexer
 
 import (
 	"fmt"
-	"unicode"
 	"github.com/fractalbach/eval-expressions/token"
+	"unicode"
 )
 
 // ======================================================================
@@ -58,13 +58,20 @@ func (l *Lexer) clear() {
 }
 
 // ======================================================================
+// Fun Error Messages
+// ======================================================================
+
+const errNumWord = "starting words with numbers is just confusing o_o !"
+
+// ======================================================================
 // Tokenization Process
 // ======================================================================
 
 var (
 	content        = ""
-	kind           = ""
 	insideToken    = false
+	insideNum      = false
+	insideWord     = false
 	dotUsedAlready = false
 )
 
@@ -72,18 +79,21 @@ func (l *Lexer) tokenize(s string) {
 	reset()
 	for _, r := range s {
 		switch r {
-
+			
 		case '(', ')', '+', '-', '*', '/', '=':
 			l.pushLastToken()
-			l.push(token.SymbolToken, string(r))
+			tok := token.NewFromSymbol(r)
+			l.push(tok)
 			continue
 
 		case '.':
-			if kind == token.NoKind {
-				l.setErr("cannot use \".\" to start a number")
+			if !insideToken {
+				insideToken = true
+				insideNum = true
+				content += "0."
 				return
 			}
-			if kind != token.NumberToken {
+			if !insideNum {
 				l.setErr("cannot use \".\" outside number")
 				return
 			}
@@ -96,23 +106,25 @@ func (l *Lexer) tokenize(s string) {
 			continue
 		}
 		switch {
-
+			
 		case unicode.IsSpace(r):
 			continue
 
 		case unicode.IsDigit(r):
 			if !insideToken {
-				startToken(token.NumberToken)
+				insideToken = true
+				insideNum = true
 			}
 			content += string(r)
 			continue
 
 		case unicode.IsLetter(r):
 			if !insideToken {
-				startToken(token.IDToken)
+				insideToken = true
+				insideWord = true
 			}
-			if kind == token.NumberToken {
-				l.setErr("cannot start identifier with a number.")
+			if insideNum {
+				l.setErr(errNumWord)
 				return
 			}
 			content += string(r)
@@ -127,31 +139,34 @@ func (l *Lexer) tokenize(s string) {
 func (l *Lexer) setErr(i ...interface{}) {
 	msg := ""
 	msg += "__________ Syntax Error __________\n"
-	msg += "That's a mean expression to give me =(\n"
+	msg += "If you're gonna be like that,\n"
+	msg += "then I'm not gonna answer you =P\n"
+	msg += "ERROR: "
 	msg += fmt.Sprint(i...)
 	l.err = fmt.Errorf("%s", msg)
 }
 
 func (l *Lexer) pushLastToken() {
-	if insideToken {
-		l.push(kind, content)
+	if !insideToken {
+		return
+	}
+	if insideNum {
+		l.push(token.NewNum(content))
+	}
+	if insideWord {
+		l.push(token.NewWord(content))
 	}
 	reset()
 }
 
-func (l *Lexer) push(kind, content string) {
-	l.tokens = append(l.tokens, token.New(kind, content))
-}
-
-
-func startToken(name string) {
-	insideToken = true
-	kind = name
+func (l *Lexer) push(tok token.Token) {
+	l.tokens = append(l.tokens, tok)
 }
 
 func reset() {
 	insideToken = false
-	kind = ""
-	content = ""
+	insideNum = false
+	insideWord = false
 	dotUsedAlready = false
+	content = ""
 }

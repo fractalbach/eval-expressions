@@ -21,6 +21,7 @@ func Parse(list []token.Token) (AST, error) {
 	p.node = p.root
 	go p.parseStart()
 	<-p.done
+	fmt.Println("done")
 	ast := AST{root: p.root}
 	var err error
 	if p.err != "" {
@@ -47,7 +48,6 @@ type parser struct {
 // ------------------------------------------------------------
 
 func (p *parser) token() token.Token {
-	fmt.Println("current:", p.index, "  total:", len(p.tokens))
 	return p.tokens[p.index]
 }
 
@@ -72,8 +72,12 @@ func (p *parser) peek() (token.Token, bool) {
 }
 
 func (p *parser) consume() {
-	p.node.pushChild(newNode(p.token().Content))
-	fmt.Println("consumed:", p.token())
+	n := &node{
+		token: p.token(),
+		terminal: true,
+	}
+	p.node.pushChild(n)
+	// fmt.Println("consumed:", p.token())
 	p.advance()
 }
 
@@ -87,49 +91,43 @@ func (p *parser) parseStart() {
 }
 
 func (p *parser) parseExpression() {
-	p.pushAndFollow("expression")
+	p.pushAndFollow("expr")
 	defer p.climbUp()
 	//
 	// Start by checking for a nested expression.
 	//
 	if p.token().Content == "(" {
-		p.consume()
+		p.advance()
 		if p.token().Content != ")" {
-			p.parseExpression()	
+			p.parseExpression()
 		}
 		if p.token().Content != ")" {
-			p.err = "open paren must have matching close paren."
-			return
+			p.throw("open paren must have matching close paren.")
 		}
-		p.consume()
+		p.advance()
 		return
 	}
 	//
-	// Since it doesn't start with parens, it might be a terminal
-	// number or an identifier
-	//
+	// Check for a terminal node like a plain number or identifier.
+	// 
 	kind := p.token().Kind
 	if kind == token.NumberToken || kind == token.IDToken {
 		p.consume()
-		return
+	} else {
+		p.parseExpression()
 	}
 	//
-	// Since it's not a terminal, it be an expression with an
-	// operator, followed by a secondary expression.
+	// Check if we have an operator now.  If we don't, then assume the
+	// expression has been completed.
 	//
-	p.parseExpression()
-	p.parseOperator()
-	p.parseSecondaryExpression()
+	for p.hasOperator() {
+		p.parseOperator()
+		p.parseSecondaryExpression()
+	}
 }
 
 func (p *parser) parseOperator() {
-	p.pushAndFollow("operator")
-	defer p.climbUp()
-	//
-	// Don't be fooled by other symbols! they're just imposters!
-	//
-	switch p.token().Content {
-	case "-", "+", "/", "*":
+	if p.hasOperator() {
 		p.consume()
 		return
 	}
@@ -144,7 +142,7 @@ func (p *parser) parseOperator() {
 }
 
 func (p *parser) parseSecondaryExpression() {
-	p.pushAndFollow("2ndExpression")
+	p.pushAndFollow("expr2")
 	defer p.climbUp()
 	//
 	// If you aren't in a nest, you must be terminally falling
@@ -167,8 +165,6 @@ func (p *parser) parseSecondaryExpression() {
 }
 
 func (p *parser) parseTerm() {
-	p.pushAndFollow("term")
-	defer p.climbUp()
 	kind := p.token().Kind
 	if !(kind == token.NumberToken || kind == token.IDToken) {
 		p.throw(
@@ -178,11 +174,20 @@ func (p *parser) parseTerm() {
 			p.token().Content,
 		)
 	}
+	p.consume()
 }
 
 func (p *parser) throw(v ...interface{}) {
 	p.err = fmt.Sprint(v...)
 	p.done <- true
+}
+
+func (p *parser) hasOperator() bool {
+	switch p.token().Content {
+	case "-", "+", "/", "*":
+		return true
+	}
+	return false
 }
 
 // ======================================================================
@@ -191,6 +196,7 @@ func (p *parser) throw(v ...interface{}) {
 
 type node struct {
 	name     string
+	token    token.Token
 	terminal bool
 	parent   *node
 	children []*node
@@ -218,12 +224,17 @@ func newNode(name string) *node {
 func (n *node) display(depth int) {
 	spaces := ""
 	for i := 0; i < depth; i++ {
-		spaces += " "
+		spaces += "  "
 	}
-	fmt.Printf("%v%v\n", spaces, n.name)
+	if n.terminal {
+		fmt.Printf("%v%v\n", spaces, n.token)
+		return
+	}
+	fmt.Printf("%v<%v>\n", spaces, n.name)
 	for _, next := range n.children {
 		next.display(depth + 1)
 	}
+	fmt.Printf("%v</%v>\n", spaces, n.name)
 }
 
 // ======================================================================
