@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	// "strconv"
 
 	"github.com/fractalbach/eval-expressions/token"
 )
@@ -18,7 +19,7 @@ dragon book info:
 (72) : expresions, terms, factors
 (74) : problems
 (81) : traversals & semantic actions {}
-(83) : problems 
+(83) : problems
 
 
 # Postfix Translation using Semantic Actions
@@ -26,21 +27,21 @@ dragon book info:
 Left-associative
 Post-order Traversal
 
-stmnt ->  
+stmnt ->
 | id = expr     {assign}
 | expr          {display}
 
-expr ->  
+expr ->
 | expr + term   {add}
 | expr - term   {sub}
-| term         
+| term
 
-term ->  
+term ->
 | term * factor {mul}
 | term / factor {div}
-| factor 
+| factor
 
-factor -> 
+factor ->
 | number        {push number}
 | ( expr )
 
@@ -123,11 +124,12 @@ func (n *Node) appendChild(child *Node) {
 // ======================================================================
 
 /*
-stmnt ->  
+
+stmnt ->
 | id = expr     {assign}
 | expr          {display}
 
-expr ->  
+expr ->
 | expr + term   {add}
 | expr - term   {sub}
 | term
@@ -135,27 +137,33 @@ expr ->
 term ->
 | term * factor {mul}
 | term / factor {div}
-| factor 
+| factor
 
-factor -> 
+factor ->
 | number        {push number}
 | word          {push word}
 | ( expr )
 
 */
 
-
-
 /*
 
 ==================================================
 Modified Grammar to eliminate Left-Recursion
 ==================================================
- 
-expr -> 
+
+stmnt ->
+| id {push $id} stmnt_rest
+| exp
+
+stmnt_rest ->
+| = exp
+| exp_rest
+
+exp ->
 | term exp_rest
 
-exp_rest -> 
+exp_rest ->
 | + term {add} exp_rest
 | - term {subtract} exp_rest
 | empty
@@ -164,17 +172,25 @@ term ->
 | factor term_rest
 
 term_rest ->
-| * factor {mult} factor_rest
-| / factor {div} factor_rest
+| * factor {mult} term_rest
+| / factor {div} term_rest
 | empty
 
 factor ->
-| num
-| word
+| num {push $num}
+| id {push $id}
 | ( expr )
 
 */
 
+// ======================================================================
+// Tables and Stuff
+// ======================================================================
+
+var (
+	symbolTable = map[string]float64{}
+	answer      = float64(0)
+)
 
 // ======================================================================
 // Interacting with the Parser
@@ -185,10 +201,10 @@ factor ->
 // interface.
 
 var (
-	errtxt = ""
-	result = ""
+	errtxt    = ""
+	result    = ""
 	lookahead = 0
-	list = []token.Token{}
+	list      = []token.Token{}
 )
 
 func Parse(tokenList []token.Token) {
@@ -210,13 +226,53 @@ func Text() string {
 	return result
 }
 
-
 // ======================================================================
 // Top-Down Recursive Parser
 // ======================================================================
 
 func start() {
-	expr()
+	stmnt()
+	if !noTokens() && !hasErr() {
+		syntaxError("extra tokens at the end!\n")
+		for _, v := range list[lookahead:] {
+			errtxt += "\t" + fmt.Sprintln(v)
+		}
+	}
+}
+
+func stmnt() {
+	t := getToken()
+	if hasErr() {
+		return
+	}
+	switch t.Kind {
+	case token.WORD:
+		match(token.WORD)
+		output("push ", t.Content)
+		stmntRest()
+	default:
+		expr()
+	}
+}
+
+func stmntRest() {
+	//optional
+	if noTokens() {
+		return
+	}
+	t := getToken()
+	if hasErr() {
+		return
+	}
+	switch t.Kind {
+	case token.EQ:
+		match(token.EQ)
+		expr()
+		output("assign")
+	default:
+		exprRest()
+		output("display")
+	}
 }
 
 func expr() {
@@ -271,8 +327,8 @@ func termRest() {
 		match(token.DIV)
 		factor()
 		output("div")
-		exprRest()		
-	}	
+		exprRest()
+	}
 }
 
 func factor() {
@@ -294,13 +350,11 @@ func factor() {
 	default:
 		syntaxError("expected a number, word, or left paren")
 	}
-
 }
 
 func output(args ...interface{}) {
 	result += fmt.Sprint(args...) + "\n"
 }
-
 
 // ======================================================================
 // Tooling Functions
@@ -308,7 +362,7 @@ func output(args ...interface{}) {
 
 func match(expected token.Kind) {
 	given := getToken().Kind
-	if given & expected == 0 {
+	if given&expected == 0 {
 		syntaxError("expected:", expected, ", got:", given)
 		return
 	}
@@ -316,7 +370,7 @@ func match(expected token.Kind) {
 }
 
 func getToken() token.Token {
-	if (lookahead >= len(list)) {
+	if lookahead >= len(list) {
 		syntaxError("unexpected end of input")
 		return token.Token{}
 	}
@@ -344,7 +398,7 @@ func (ast *AST) semantics() {
 	ast.Root.recurseSemantics()
 }
 
-// postorder traverse, also called depth-first traverse 
+// postorder traverse, also called depth-first traverse
 func (n *Node) recurseSemantics() {
 	n.semantics()
 	if len(n.Children) == 0 {
@@ -367,4 +421,3 @@ func (n *Node) semantics() {
 	case FACTOR:
 	}
 }
-
