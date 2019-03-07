@@ -1,4 +1,12 @@
-
+---
+documentclass: scrartcl
+pagesize: a5
+fontsize: 12pt
+<!-- geometry: landscape -->
+<!-- classoption: twocolumn -->
+indent: yes
+geometry: margin=1in, bottom=1in, top=0.5in
+---
 
 
 # Dragon Book

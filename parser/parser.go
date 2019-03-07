@@ -118,9 +118,6 @@ func (n *Node) appendChild(child *Node) {
 	n.Children = append(n.Children, child)
 }
 
-func Parse(s string) struct {
-}
-
 // ======================================================================
 // Productions
 // ======================================================================
@@ -133,21 +130,211 @@ stmnt ->
 expr ->  
 | expr + term   {add}
 | expr - term   {sub}
-| term         
+| term
 
-term ->  
+term ->
 | term * factor {mul}
 | term / factor {div}
 | factor 
 
 factor -> 
 | number        {push number}
+| word          {push word}
 | ( expr )
 
 */
 
 
 
+/*
+
+==================================================
+Modified Grammar to eliminate Left-Recursion
+==================================================
+ 
+expr -> 
+| term exp_rest
+
+exp_rest -> 
+| + term {add} exp_rest
+| - term {subtract} exp_rest
+| empty
+
+term ->
+| factor term_rest
+
+term_rest ->
+| * factor {mult} factor_rest
+| / factor {div} factor_rest
+| empty
+
+factor ->
+| num
+| word
+| ( expr )
+
+*/
+
+
+// ======================================================================
+// Interacting with the Parser
+// ======================================================================
+
+// The user calls Parse(), then checks errors using Err(), and finally
+// extracts the text using Text().  Similar interface to the Scanner
+// interface.
+
+var (
+	errtxt = ""
+	result = ""
+	lookahead = 0
+	list = []token.Token{}
+)
+
+func Parse(tokenList []token.Token) {
+	errtxt = ""
+	result = ""
+	lookahead = 0
+	list = tokenList
+	start()
+}
+
+func Err() error {
+	if errtxt == "" {
+		return nil
+	}
+	return fmt.Errorf(errtxt)
+}
+
+func Text() string {
+	return result
+}
+
+
+// ======================================================================
+// Top-Down Recursive Parser
+// ======================================================================
+
+func start() {
+	expr()
+}
+
+func expr() {
+	term()
+	exprRest()
+}
+
+func exprRest() {
+	// optional
+	if noTokens() {
+		return
+	}
+	t := getToken()
+	if hasErr() {
+		return
+	}
+	switch t.Kind {
+	case token.ADD:
+		match(token.ADD)
+		term()
+		output("add")
+		exprRest()
+	case token.SUB:
+		match(token.SUB)
+		term()
+		output("subtract")
+		exprRest()
+	}
+}
+
+func term() {
+	factor()
+	termRest()
+}
+
+func termRest() {
+	// optional
+	if noTokens() {
+		return
+	}
+	t := getToken()
+	if hasErr() {
+		return
+	}
+	switch t.Kind {
+	case token.MUL:
+		match(token.MUL)
+		factor()
+		output("mult")
+		exprRest()
+	case token.DIV:
+		match(token.DIV)
+		factor()
+		output("div")
+		exprRest()		
+	}	
+}
+
+func factor() {
+	t := getToken()
+	if hasErr() {
+		return
+	}
+	switch t.Kind {
+	case token.LEFTPAREN:
+		match(token.LEFTPAREN)
+		expr()
+		match(token.RIGHTPAREN)
+	case token.NUM:
+		output("push ", t.Content)
+		match(token.NUM)
+	case token.WORD:
+		output("push ", t.Content)
+		match(token.WORD)
+	default:
+		syntaxError("expected a number, word, or left paren")
+	}
+
+}
+
+func output(args ...interface{}) {
+	result += fmt.Sprint(args...) + "\n"
+}
+
+
+// ======================================================================
+// Tooling Functions
+// ======================================================================
+
+func match(expected token.Kind) {
+	given := getToken().Kind
+	if given & expected == 0 {
+		syntaxError("expected:", expected, ", got:", given)
+		return
+	}
+	lookahead++
+}
+
+func getToken() token.Token {
+	if (lookahead >= len(list)) {
+		syntaxError("unexpected end of input")
+		return token.Token{}
+	}
+	return list[lookahead]
+}
+
+func hasErr() bool {
+	return errtxt != ""
+}
+
+func noTokens() bool {
+	return lookahead >= len(list)
+}
+
+func syntaxError(args ...interface{}) {
+	errtxt += "Syntax Error: "
+	errtxt += fmt.Sprint(args...)
+}
 
 // ======================================================================
 // Semantics

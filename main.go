@@ -7,6 +7,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/fractalbach/eval-expressions/lexer"
+	"github.com/fractalbach/eval-expressions/parser"
 )
 
 var (
@@ -66,11 +67,10 @@ func eval(s string) {
 	}
 
 	lex.Tokenize(s)
-
 	err := lex.Error()
 
 	color.Set(color.FgHiMagenta)
-	// fmt.Println("══════════ Tokens ══════════ ")
+	fmt.Println("══════════ Tokens ══════════ ")
 	lex.Display()
 	color.Unset()
 
@@ -79,11 +79,19 @@ func eval(s string) {
 		return
 	}
 
-	fmt.Println()
+	parser.Parse(lex.Tokens())
 
-	// color.Set(color.FgGreen)
-	// fmt.Println("══════════ Answer ══════════ ")
-	// color.Unset()
+	color.Set(color.FgGreen)
+	fmt.Println("══════════ Answer ══════════ ")
+	fmt.Println(parser.Text())
+	color.Unset()
+
+	if parser.Err() != nil {
+		showErr(parser.Err())
+		return
+	}
+
+	fmt.Println()
 }
 
 func title(title string, boxSize int) string {
