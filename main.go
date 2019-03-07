@@ -40,13 +40,14 @@ func welcome() {
 }
 
 func inputStarter() {
-	color.Set(color.FgCyan)
+	// color.Set(color.FgHiCyan)
 	fmt.Print(">>> ")
-	color.Unset()
+	// color.Unset()
 }
 
 func showErr(err interface{}) {
 	color.Set(color.FgHiRed)
+	fmt.Println("══════════ Error ══════════ ")
 	fmt.Fprintln(os.Stderr, err)
 	color.Unset()
 }
@@ -60,6 +61,8 @@ const lolz = `
 |                                                  |
 |             It's final words were....            |
 |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|`
+
+// ══════════ Example ══════════
 
 func eval(s string) {
 	if s == "" {
@@ -81,15 +84,20 @@ func eval(s string) {
 
 	parser.Parse(lex.Tokens())
 
-	color.Set(color.FgGreen)
-	fmt.Println("══════════ Answer ══════════ ")
-	fmt.Println(parser.Text())
+	color.Set(color.FgCyan)
+	fmt.Println("══════════ Stack  ══════════ ")
+	fmt.Print(parser.Text())
 	color.Unset()
 
 	if parser.Err() != nil {
 		showErr(parser.Err())
 		return
 	}
+
+	color.Set(color.FgHiGreen)
+	fmt.Println("══════════ Result ══════════ ")
+	fmt.Println(parser.Result())
+	color.Unset()
 
 	fmt.Println()
 }

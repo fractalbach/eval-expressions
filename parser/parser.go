@@ -2,7 +2,7 @@ package parser
 
 import (
 	"fmt"
-	// "strconv"
+	"strconv"
 
 	"github.com/fractalbach/eval-expressions/token"
 )
@@ -190,7 +190,77 @@ factor ->
 var (
 	symbolTable = map[string]float64{}
 	answer      = float64(0)
+	stack       = []float64{}
 )
+
+func toNum(t token.Token) float64 {
+	f, err := strconv.ParseFloat(t.Content, 64)
+	if err != nil {
+		errtxt += "Eval Error:"
+		errtxt += fmt.Sprint(err)
+	}
+	return f
+}
+
+func push(f float64) {
+	stack = append(stack, f)
+}
+
+func pop() float64 {
+	if len(stack) < 1 {
+		result += "STACK EMPTY\n"
+		errtxt += "eval error: stack empty."
+		return 0
+	}
+	x := stack[len(stack)-1]
+	stack = stack[:len(stack)-1]
+	return x
+}
+
+func add() {
+	b := pop()
+	a := pop()
+	push(a + b)
+}
+
+func subtract() {
+	b := pop()
+	a := pop()
+	push(a - b)
+}
+
+func multiply() {
+	b := pop()
+	a := pop()
+	push(a * b)
+}
+
+func divide() {
+	b := pop()
+	a := pop()
+	push(a / b)
+}
+
+func display() {
+	answer = pop()
+}
+
+func assign(name string) {
+	answer = pop()
+	symbolTable[name] = answer
+	assignDone = true
+}
+
+func lookup(name string) float64 {
+	v, ok := symbolTable[name]
+	if !ok {
+		errtxt += fmt.Sprintf(
+			"lookup error: \"%s\" not found.\n", name,
+		)
+		return 0
+	}
+	return v
+}
 
 // ======================================================================
 // Interacting with the Parser
@@ -201,16 +271,24 @@ var (
 // interface.
 
 var (
-	errtxt    = ""
-	result    = ""
-	lookahead = 0
-	list      = []token.Token{}
+	assignDone = false
+	errtxt     = ""
+	result     = ""
+	lookahead  = 0
+	list       = []token.Token{}
 )
 
-func Parse(tokenList []token.Token) {
+func clear() {
+	assignDone = false
 	errtxt = ""
 	result = ""
 	lookahead = 0
+	answer = float64(0)
+	stack = []float64{}
+}
+
+func Parse(tokenList []token.Token) {
+	clear()
 	list = tokenList
 	start()
 }
@@ -226,15 +304,32 @@ func Text() string {
 	return result
 }
 
+func Result() string {
+	if assignDone {
+		return fmt.Sprintf("Set %s to %v",
+			savedFirstTerm, answer,
+		)
+	}
+	return fmt.Sprint(answer)
+}
+
 // ======================================================================
 // Top-Down Recursive Parser
 // ======================================================================
+
+var savedFirstTerm = ""
 
 func start() {
 	stmnt()
 	if !noTokens() && !hasErr() {
 		syntaxError("extra tokens at the end!\n")
 		for _, v := range list[lookahead:] {
+			errtxt += "\t" + fmt.Sprintln(v)
+		}
+	}
+	if len(stack) > 0 {
+		errtxt += "eval error: unevaluated items on stack.\n"
+		for _, v := range stack {
 			errtxt += "\t" + fmt.Sprintln(v)
 		}
 	}
@@ -248,16 +343,22 @@ func stmnt() {
 	switch t.Kind {
 	case token.WORD:
 		match(token.WORD)
-		output("push ", t.Content)
+		savedFirstTerm = t.Content
 		stmntRest()
 	default:
 		expr()
+		output("display")
+		display()
 	}
 }
 
 func stmntRest() {
 	//optional
 	if noTokens() {
+		output("push ", savedFirstTerm)
+		push(lookup(savedFirstTerm))
+		output("display")
+		display()
 		return
 	}
 	t := getToken()
@@ -268,10 +369,20 @@ func stmntRest() {
 	case token.EQ:
 		match(token.EQ)
 		expr()
-		output("assign")
-	default:
+		output("assign to ", savedFirstTerm)
+		assign(savedFirstTerm)
+	case token.ADD, token.SUB:
+		output("push ", savedFirstTerm)
+		push(lookup(savedFirstTerm))
 		exprRest()
 		output("display")
+		display()
+	case token.MUL, token.DIV:
+		output("push ", savedFirstTerm)
+		push(lookup(savedFirstTerm))
+		termRest()
+		output("display")
+		display()
 	}
 }
 
@@ -294,11 +405,13 @@ func exprRest() {
 		match(token.ADD)
 		term()
 		output("add")
+		add()
 		exprRest()
 	case token.SUB:
 		match(token.SUB)
 		term()
 		output("subtract")
+		subtract()
 		exprRest()
 	}
 }
@@ -322,11 +435,13 @@ func termRest() {
 		match(token.MUL)
 		factor()
 		output("mult")
+		multiply()
 		exprRest()
 	case token.DIV:
 		match(token.DIV)
 		factor()
 		output("div")
+		divide()
 		exprRest()
 	}
 }
@@ -343,10 +458,12 @@ func factor() {
 		match(token.RIGHTPAREN)
 	case token.NUM:
 		output("push ", t.Content)
+		push(toNum(t))
 		match(token.NUM)
 	case token.WORD:
 		output("push ", t.Content)
 		match(token.WORD)
+		push(lookup(t.Content))
 	default:
 		syntaxError("expected a number, word, or left paren")
 	}
